@@ -1,0 +1,55 @@
+
+services:
+  db:
+    image: postgis/postgis:16-3.5
+    container_name: tumap_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${PGPORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # command:l
+    # - "postgres"
+    # - "-c" "shared_buffers=1GB"
+    # - "-c" "work_mem=50MB"
+    # - "-c" "maintenance_work_mem=4GB"
+    # - "-c" "wal_level=minimal"
+    # - "-c" "checkpoint_timeout=60min"
+    # - "-c" "max_wal_size=4GB"
+    # - "-c" "checkpoint_completion_target=0.9"
+    # - "-c" "max_wal_senders=0"
+    # - "-c" "random_page_cost=1.0"
+
+  importer:
+    # If this image name changes, swap to a known-good osm2pgsql image.
+    image: iboates/osm2pgsql:2.1.1
+    container_name: tumap_importer
+    profiles: ["import"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PBF_URL: ${PBF_URL}
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      TARGET_SRID: ${TARGET_SRID:-3857}
+    volumes:
+      - ./importer:/importer
+    entrypoint: ["/bin/sh", "-c", "/importer/import.sh"]
+
+volumes:
+  pgdata:
+  cache:
+
