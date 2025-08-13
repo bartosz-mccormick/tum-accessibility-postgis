@@ -1,0 +1,3 @@
+class_a, sql
+bakery,
+pastry_shop, WHERE shop = 'pastry'
