@@ -7,7 +7,7 @@ local KEYS_CLASS_MAIN = {
 
 -- LIST B (refinement keys) – not used to decide, but stored in tags
 local KEYS_CLASS_REFINE = {
-    'bus','tram','train','origin','isced:level','healthcare:speciality'
+    'bus','tram','train','origin','isced:level','healthcare:speciality','name'
 }
 
 -- Turn LIST A into a fast lookup table
@@ -40,9 +40,6 @@ local function sanitize_key(key)
     return string.gsub(key, ":", "_")
 end
 
-local function unsanitize_key(key)
-    return string.gsub(key, "_", ":")
-end
 
 local columns_points = {}
 
@@ -56,9 +53,6 @@ end
 
 -- Add geometry and optional ID columns
 table.insert(columns_points, { column = 'geom', type = 'point', projection = srid, not_null = true })
-table.insert(columns_points, { column = 'name', type = 'text' })
-
-local keys_complete  = {}
 
 -- For areas: copy and swap geometry type
 local columns_poly = {}
@@ -67,7 +61,6 @@ for _, col in ipairs(columns_points) do
         table.insert(columns_poly, { column = 'geom', type = 'polygon', projection = srid, not_null = true })
     else
         table.insert(columns_poly, col)
-        table.insert(keys_complete,col.column) 
     end
 end
 
@@ -133,8 +126,11 @@ end
 
 local function extract_tag_fields(tags)
     local row = {}
-    for _, k in ipairs(keys_complete) do
-        row[k] = tags[unsanitize_key(k)]
+    for _, k in ipairs(KEYS_CLASS_MAIN) do
+        row[sanitize_key(k)] = tags[k]
+    end
+    for _, k in ipairs(KEYS_CLASS_REFINE) do
+        row[sanitize_key(k)] = tags[k]
     end
     return row
 end
