@@ -48,7 +48,8 @@ services:
       TARGET_SRID: ${TARGET_SRID:-3857}
     volumes:
       - ./importer:/importer
-    entrypoint: ["/bin/sh", "-c", "/importer/import.sh"]
+      - ./sql:/sql
+    entrypoint: ["/bin/sh", "/importer/import.sh"]
 
 volumes:
   pgdata:
