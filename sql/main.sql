@@ -454,6 +454,9 @@ JOIN staging.class_a_config c USING (class_a);
 DROP MATERIALIZED VIEW IF EXISTS staging.classified_valid CASCADE;
 CREATE MATERIALIZED VIEW staging.classified_valid AS
 SELECT
+  ROW_NUMBER() OVER (
+    ORDER BY osm_id, class_a, name
+  )::bigint AS a_id,
   osm_id,
   class_a,
   name,
@@ -489,6 +492,8 @@ CREATE INDEX IF NOT EXISTS amenities_polygons_geom_gix
   ON model.amenities_polygons USING GIST (geom);
 CREATE INDEX IF NOT EXISTS amenities_polygons_class
   ON model.amenities_polygons (class_a);
+CREATE UNIQUE INDEX IF NOT EXISTS amenities_polygons_a_id
+  ON model.amenities_polygons (a_id);
 
 DROP MATERIALIZED VIEW IF EXISTS model.amenities_points CASCADE;
 CREATE MATERIALIZED VIEW model.amenities_points AS
@@ -513,12 +518,15 @@ CREATE INDEX IF NOT EXISTS amenities_points_geom_gix
   ON model.amenities_points USING GIST (geom);
 CREATE INDEX IF NOT EXISTS amenities_points_class
   ON model.amenities_points (class_a);
+CREATE UNIQUE INDEX IF NOT EXISTS amenities_points_a_id
+  ON model.amenities_points (a_id);
 
 -- Convenience read endpoint (non-materialized): combine points + polygons
 CREATE OR REPLACE VIEW model.amenities AS
-SELECT osm_id,class_a,name, geom FROM model.amenities_points
+SELECT * FROM model.amenities_points
 UNION ALL
-SELECT osm_id,class_a,name, geom FROM model.amenities_polygons;
+SELECT * FROM model.amenities_polygons;
+
 
 
 -- =========================================================
@@ -553,6 +561,7 @@ CREATE MATERIALIZED VIEW model.entrances AS
 WITH polys AS (
   -- Only polygon amenities are candidates for boundary-road intersections
   SELECT
+    p.a_id AS parent_a_id,
     p.osm_id AS parent_osm_id,
     p.class_a,
     p.name,
@@ -562,6 +571,7 @@ WITH polys AS (
 ix AS (
   -- Intersections of polygon boundary with roads (may produce points and/or lines)
   SELECT
+    p.parent_a_id,
     p.parent_osm_id,
     p.class_a,
     p.name,
@@ -575,6 +585,7 @@ ix AS (
 ix_pts AS (
   -- Extract discrete entrance points from point intersections
   SELECT
+    parent_a_id,
     parent_osm_id,
     class_a,
     name,
@@ -588,6 +599,7 @@ ix_pts AS (
 ix_line_mid AS (
   -- For linear overlaps (shared edges), take the midpoint as a plausible entrance location
   SELECT
+    parent_a_id,
     parent_osm_id,
     class_a,
     name,
@@ -606,6 +618,7 @@ hits AS (
 nohit_polys AS (
   -- Polygons with no boundary-road intersection -> fallback entrance at centroid
   SELECT
+    p.a_id AS parent_a_id,
     p.osm_id AS parent_osm_id,
     p.class_a,
     p.name,
@@ -623,6 +636,7 @@ nohit_polys AS (
 all_points AS (
   -- Include all point amenities as entrances (they already are points)
   SELECT
+    a_id AS parent_a_id,
     osm_id       AS parent_osm_id,
     class_a,
     name,
@@ -641,13 +655,15 @@ u AS (
   SELECT * FROM all_points
 )
 
--- Compute stable entrance_id + attach H3 index
 SELECT
-  'entr_' || md5(
-      u.parent_osm_id || '|' ||
-      COALESCE(u.road_osm_id::text, '') || '|' ||
-      encode(ST_AsEWKB(u.geom), 'hex')
-  ) AS entrance_id,                     -- deterministic hash ID, stable across runs if inputs unchanged
+  ROW_NUMBER() OVER (
+    ORDER BY
+      u.parent_a_id,
+      u.parent_osm_id,
+      u.road_osm_id,
+      u.class_a
+  )::bigint AS entrance_id,                 
+  u.parent_a_id,
   u.parent_osm_id,
   u.class_a,
   u.geom,
@@ -684,7 +700,7 @@ FROM u;
 
 -- Indexes for common access patterns
 CREATE INDEX IF NOT EXISTS entrances_geom_gix    ON model.entrances USING GIST (geom);
-CREATE INDEX IF NOT EXISTS entrances_parent_idx  ON model.entrances (parent_osm_id);
+CREATE INDEX IF NOT EXISTS entrances_parent_idx  ON model.entrances (parent_a_id);
 CREATE INDEX IF NOT EXISTS entrances_class_idx   ON model.entrances (class_a);
 CREATE INDEX IF NOT EXISTS entrances_id_idx      ON model.entrances (entrance_id);
 CREATE INDEX IF NOT EXISTS entrances_h3_idx      ON model.entrances (h3_cell);
