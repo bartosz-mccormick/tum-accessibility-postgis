@@ -1,8 +1,12 @@
 docker compose exec -T db sh -lc '
   set -e
  
-  echo "Downloading raster from: $POP_URL"
-  curl -L "$POP_URL" -o "/data/pop_raster.tif"
+  if [ -f /data/pop_raster.tif ]; then
+    echo "Raster already exists at /data/pop_raster.tif; skipping download."
+  else
+    echo "Downloading raster from: $POP_URL"
+    curl -fL "$POP_URL" -o /data/pop_raster.tif
+  fi
 
   echo "Dropping existing table public.raw_pop_raster (if any)"
   PGPASSWORD="$POSTGRES_PASSWORD" \

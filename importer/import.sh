@@ -31,9 +31,13 @@ echo "Database: $PGDATABASE@$PGHOST:$PGPORT (user: $PGUSER)"
 PBF_FILE="/data/osm-import.pbf"
 
 # --- Download step ---
-echo "Downloading PBF..."
-# -L follows redirects; -o writes to the temp file
-curl -L "$PBF_URL" -o "$PBF_FILE"
+if [ -f "$PBF_FILE" ]; then
+  echo "PBF already exists at $PBF_FILE; skipping download."
+else
+  echo "Downloading PBF from: $PBF_URL"
+  # -f fails on HTTP errors; -L follows redirects; -o writes to the file
+  curl -fL "$PBF_URL" -o "$PBF_FILE"
+fi
 
 osm2pgsql \
   --create \
