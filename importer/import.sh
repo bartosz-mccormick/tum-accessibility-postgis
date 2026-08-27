@@ -28,7 +28,7 @@ echo "Target SRID: $TARGET_SRID"
 echo "Database: $PGDATABASE@$PGHOST:$PGPORT (user: $PGUSER)"
 
 # Location for the temporary PBF
-PBF_FILE="/data/osm-import.pbf"
+PBF_FILE="/data/osm-import.osm.pbf"
 
 # --- Download step ---
 if [ -f "$PBF_FILE" ]; then
